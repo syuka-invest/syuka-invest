@@ -1,0 +1,1 @@
+# syuka-invest
