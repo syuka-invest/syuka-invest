@@ -44,7 +44,7 @@ upload:
 
 custom:
   service:
-    url: "http://localhost:8080"
+    url: "http://localhost:8080/"
 
 springdoc:
   api-docs:
@@ -92,7 +92,7 @@ upload:
 
 custom:
   service:
-    url: "ec2 주소 넣기"
+    url: ${BACKEND_URL}
 
 springdoc:
   api-docs:
