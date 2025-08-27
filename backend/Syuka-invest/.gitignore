@@ -38,6 +38,6 @@ out/
 .vscode/
 
 ### docker DB ###
-mongodb/*
-mysql/*
-redis/*
+/mongodb/
+/mysql/
+/redis/
