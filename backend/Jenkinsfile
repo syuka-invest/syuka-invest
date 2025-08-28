@@ -1,0 +1,90 @@
+// /backend/Jenkinsfile
+
+pipeline {
+    agent any
+
+    // --- 환경 변수 설정 ---
+    environment {
+        DOCKER_HUB_CREDENTIALS_ID = 'syuka-invest-backend-dockerhub' 
+        DOCKER_IMAGE_NAME = 'blueconecell/syukainvest-backend'
+    }
+
+    stages {
+        // --- 1. 백엔드 폴더 변경 감지 ---
+        stage('Check for Backend Changes') {
+            steps {
+                script {
+                    def backendChanges = false
+                    changeSets.each { set ->
+                        set.affectedFiles.each { file ->
+                            // 변경된 파일이 'backend/Syuka-invest/' 폴더 내부의 것인지 확인
+                            if (file.path.startsWith('backend/Syuka-invest/')) {
+                                echo "백엔드 변경 사항 발견: ${file.path}"
+                                backendChanges = true
+                            }
+                        }
+                    }
+                    
+                    if (!backendChanges) {
+                        echo "백엔드 변경 사항이 없어 파이프라인을 중단합니다."
+                        currentBuild.result = 'NOT_BUILT' 
+                        error("Skipping build: No changes in the backend source directory.")
+                    }
+                }
+            }
+        }
+
+        // --- 2. Gradle 빌드 ---
+        stage('Gradle Build') {
+            steps {
+                // Syuka-invest 디렉토리로 이동하여 빌드
+                dir('Syuka-invest') {
+                    echo 'Gradle 빌드를 시작합니다.'
+                    sh 'chmod +x gradlew'
+                    sh './gradlew build'
+                }
+            }
+        }
+
+        // --- 3. Docker 이미지 빌드 및 푸시 ---
+        stage('Build and Push Docker Image') {
+            steps {
+                // Syuka-invest 디렉토리로 이동하여 Docker 작업 수행
+                dir('Syuka-invest') {
+                    withCredentials([usernamePassword(credentialsId: DOCKER_HUB_CREDENTIALS_ID, usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
+                        script {
+                            echo "Docker 이미지를 빌드하고 푸시합니다."
+                            def imageTag = "${env.BUILD_NUMBER}"
+                            
+                            sh "echo ${DOCKER_PASSWORD} | docker login -u ${DOCKER_USERNAME} --password-stdin"
+                            sh "docker build -t ${DOCKER_IMAGE_NAME}:${imageTag} ."
+                            sh "docker tag ${DOCKER_IMAGE_NAME}:${imageTag} ${DOCKER_IMAGE_NAME}:latest"
+                            sh "docker push ${DOCKER_IMAGE_NAME}:${imageTag}"
+                            sh "docker push ${DOCKER_IMAGE_NAME}:latest"
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- 4. Docker Compose로 배포 ---
+        stage('Deploy') {
+            steps {
+                // Syuka-invest 디렉토리로 이동하여 배포
+                dir('Syuka-invest') {
+                    echo 'Docker Compose로 배포를 시작합니다.'
+                    sh "docker-compose -f docker-compose-infra.yml -f docker-compose-backend.yml pull backend"
+                    sh "docker-compose -f docker-compose-infra.yml -f docker-compose-backend.yml up -d"
+                }
+            }
+        }
+    }
+
+    // --- 빌드 후 정리 작업 ---
+    post {
+        always {
+            echo '파이프라인이 종료되었습니다. Docker 로그아웃을 실행합니다.'
+            sh 'docker logout'
+        }
+    }
+}
