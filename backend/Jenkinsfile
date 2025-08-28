@@ -3,6 +3,11 @@
 pipeline {
     agent any
 
+    // --- 빌드 파라미터 정의 (수동 강제 빌드 옵션) ---
+    parameters {
+        booleanParam(name: 'FORCE_BUILD', defaultValue: false, description: '백엔드 변경사항이 없어도 강제로 빌드를 실행하려면 체크하세요.')
+    }
+
     // --- 환경 변수 설정 ---
     environment {
         DOCKER_HUB_CREDENTIALS_ID = 'syuka-invest-backend-dockerhub' 
@@ -10,34 +15,16 @@ pipeline {
     }
 
     stages {
-        // --- 1. 백엔드 폴더 변경 감지 ---
-        stage('Check for Backend Changes') {
-            steps {
-                script {
-                    def backendChanges = false
-                    changeSets.each { set ->
-                        set.affectedFiles.each { file ->
-                            // 변경된 파일이 'backend/Syuka-invest/' 폴더 내부의 것인지 확인
-                            if (file.path.startsWith('backend/Syuka-invest/')) {
-                                echo "백엔드 변경 사항 발견: ${file.path}"
-                                backendChanges = true
-                            }
-                        }
-                    }
-                    
-                    if (!backendChanges) {
-                        echo "백엔드 변경 사항이 없어 파이프라인을 중단합니다."
-                        currentBuild.result = 'NOT_BUILT' 
-                        error("Skipping build: No changes in the backend source directory.")
-                    }
+        // --- 1. Gradle 빌드 ---
+        stage('Gradle Build') {
+            // when: 'backend/Syuka-invest/' 폴더에 변경이 있거나, FORCE_BUILD가 체크되었을 때만 실행
+            when {
+                anyOf {
+                    changeset "backend/Syuka-invest/**"
+                    expression { params.FORCE_BUILD == true }
                 }
             }
-        }
-
-        // --- 2. Gradle 빌드 ---
-        stage('Gradle Build') {
             steps {
-                // Syuka-invest 디렉토리로 이동하여 빌드
                 dir('Syuka-invest') {
                     echo 'Gradle 빌드를 시작합니다.'
                     sh 'chmod +x gradlew'
@@ -46,10 +33,15 @@ pipeline {
             }
         }
 
-        // --- 3. Docker 이미지 빌드 및 푸시 ---
+        // --- 2. Docker 이미지 빌드 및 푸시 ---
         stage('Build and Push Docker Image') {
+            when {
+                anyOf {
+                    changeset "backend/Syuka-invest/**"
+                    expression { params.FORCE_BUILD == true }
+                }
+            }
             steps {
-                // Syuka-invest 디렉토리로 이동하여 Docker 작업 수행
                 dir('Syuka-invest') {
                     withCredentials([usernamePassword(credentialsId: DOCKER_HUB_CREDENTIALS_ID, usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
                         script {
@@ -67,10 +59,15 @@ pipeline {
             }
         }
 
-        // --- 4. Docker Compose로 배포 ---
+        // --- 3. Docker Compose로 배포 ---
         stage('Deploy') {
+            when {
+                anyOf {
+                    changeset "backend/Syuka-invest/**"
+                    expression { params.FORCE_BUILD == true }
+                }
+            }
             steps {
-                // Syuka-invest 디렉토리로 이동하여 배포
                 dir('Syuka-invest') {
                     echo 'Docker Compose로 배포를 시작합니다.'
                     sh "docker-compose -f docker-compose-infra.yml -f docker-compose-backend.yml pull backend"
