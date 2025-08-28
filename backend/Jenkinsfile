@@ -3,11 +3,6 @@
 pipeline {
     agent any
 
-    // --- 빌드 파라미터 정의 (수동 강제 빌드 옵션) ---
-    parameters {
-        booleanParam(name: 'FORCE_BUILD', defaultValue: false, description: '백엔드 변경사항이 없어도 강제로 빌드를 실행하려면 체크하세요.')
-    }
-
     // --- 환경 변수 설정 ---
     environment {
         DOCKER_HUB_CREDENTIALS_ID = 'syuka-invest-backend-dockerhub' 
@@ -15,15 +10,18 @@ pipeline {
     }
 
     stages {
-        // --- 1. Gradle 빌드 ---
-        stage('Gradle Build') {
-            // when: 'backend/Syuka-invest/' 폴더에 변경이 있거나, FORCE_BUILD가 체크되었을 때만 실행
-            when {
-                anyOf {
-                    changeset "backend/Syuka-invest/**"
-                    expression { params.FORCE_BUILD == true }
-                }
+        // --- 1. 소스코드 가져오기 ---
+        stage('Checkout') {
+            steps {
+                // 이전 빌드에서 남은 파일이 없도록 작업 공간을 깨끗이 정리합니다.
+                cleanWs()
+                // Jenkins Job 설정에 명시된 Git 레포지토리의 소스코드를 가져옵니다.
+                checkout scm
             }
+        }
+
+        // --- 2. Gradle 빌드 ---
+        stage('Gradle Build') {
             steps {
                 dir('Syuka-invest') {
                     echo 'Gradle 빌드를 시작합니다.'
@@ -33,14 +31,8 @@ pipeline {
             }
         }
 
-        // --- 2. Docker 이미지 빌드 및 푸시 ---
+        // --- 3. Docker 이미지 빌드 및 푸시 ---
         stage('Build and Push Docker Image') {
-            when {
-                anyOf {
-                    changeset "backend/Syuka-invest/**"
-                    expression { params.FORCE_BUILD == true }
-                }
-            }
             steps {
                 dir('Syuka-invest') {
                     withCredentials([usernamePassword(credentialsId: DOCKER_HUB_CREDENTIALS_ID, usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
@@ -59,14 +51,8 @@ pipeline {
             }
         }
 
-        // --- 3. Docker Compose로 배포 ---
+        // --- 4. Docker Compose로 배포 ---
         stage('Deploy') {
-            when {
-                anyOf {
-                    changeset "backend/Syuka-invest/**"
-                    expression { params.FORCE_BUILD == true }
-                }
-            }
             steps {
                 dir('Syuka-invest') {
                     echo 'Docker Compose로 배포를 시작합니다.'
