@@ -23,7 +23,8 @@ pipeline {
         // --- 2. Gradle 빌드 ---
         stage('Gradle Build') {
             steps {
-                dir('Syuka-invest') {
+                // 경로 수정: backend/Syuka-invest 로 변경
+                dir('backend/Syuka-invest') {
                     echo 'Gradle 빌드를 시작합니다.'
                     sh 'chmod +x gradlew'
                     sh './gradlew build'
@@ -34,7 +35,8 @@ pipeline {
         // --- 3. Docker 이미지 빌드 및 푸시 ---
         stage('Build and Push Docker Image') {
             steps {
-                dir('Syuka-invest') {
+                // 경로 수정: backend/Syuka-invest 로 변경
+                dir('backend/Syuka-invest') {
                     withCredentials([usernamePassword(credentialsId: DOCKER_HUB_CREDENTIALS_ID, usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
                         script {
                             echo "Docker 이미지를 빌드하고 푸시합니다."
@@ -54,7 +56,8 @@ pipeline {
         // --- 4. Docker Compose로 배포 ---
         stage('Deploy') {
             steps {
-                dir('Syuka-invest') {
+                // 경로 수정: backend/Syuka-invest 로 변경
+                dir('backend/Syuka-invest') {
                     echo 'Docker Compose로 배포를 시작합니다.'
                     sh "docker-compose -f docker-compose-infra.yml -f docker-compose-backend.yml pull backend"
                     sh "docker-compose -f docker-compose-infra.yml -f docker-compose-backend.yml up -d"
